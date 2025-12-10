@@ -120,4 +120,41 @@ describe('Escrow', () => {
             expect(await escrow.approval(1, lender.address)).to.be.equal(true)
         })
     })
+
+    describe('Finalizing', () => {
+        beforeEach('Transfers ownership to buyer', async () => {
+            let tx = await escrow.connect(buyer).depositEarnest(1, { value: tokens(5) })
+            await tx.wait()
+
+            tx = await escrow.connect(inspector).updateInspectProperty(1, true)
+            await tx.wait()
+
+            tx = await escrow.connect(buyer).approveSale(1)
+            await tx.wait()
+
+            tx = await escrow.connect(seller).approveSale(1)
+            await tx.wait()
+
+            tx = await escrow.connect(lender).approveSale(1)
+            await tx.wait()
+
+            await lender.sendTransaction({
+                to: escrow.address,
+                value: tokens(5)
+            })
+
+            tx = await escrow.connect(seller).finalizeSale(1)
+            await tx.wait()
+        })
+
+        it('Updates ownership to buyer', async () => {
+            let owner = await realEstate.ownerOf(1)
+            expect(owner).to.be.equal(buyer.address)
+        })
+
+        it('Updates escrow balance to 0', async () => {
+            let balance = await escrow.getBalance()
+            expect(balance).to.be.equal(0)
+        })
+    })
 })
