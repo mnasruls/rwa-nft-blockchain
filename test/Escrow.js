@@ -82,6 +82,42 @@ describe('Escrow', () => {
             let escrowAmount = await escrow.escrowAmount(1)
             expect(escrowAmount).to.be.equal(tokens(5))
         })
+    })
 
+    describe('Depositing', () => {
+        it('Updates escrow balance', async () => {
+            let tx = await escrow.connect(buyer).depositEarnest(1, { value: tokens(5) })
+            await tx.wait()
+
+            let balance = await escrow.getBalance()
+            expect(balance).to.be.equal(tokens(5))
+        })
+    })
+
+    describe('Inspection', () => {
+        it('Updates inspection status', async () => {
+            let tx = await escrow.connect(inspector).updateInspectProperty(1, true)
+            await tx.wait()
+
+            let isInspected = await escrow.isInspected(1)
+            expect(isInspected).to.be.equal(true)
+        })
+    })
+
+    describe('Approval', () => {
+        it('Updates approval status', async () => {
+            let tx = await escrow.connect(buyer).approveSale(1)
+            await tx.wait()
+
+            tx = await escrow.connect(seller).approveSale(1)
+            await tx.wait()
+
+            tx = await escrow.connect(lender).approveSale(1)
+            await tx.wait()
+
+            expect(await escrow.approval(1, buyer.address)).to.be.equal(true)
+            expect(await escrow.approval(1, seller.address)).to.be.equal(true)
+            expect(await escrow.approval(1, lender.address)).to.be.equal(true)
+        })
     })
 })
