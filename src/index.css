@@ -354,3 +354,15 @@ header {
     display: none;
   }
 }
+
+.cards__containers {
+  display: flex;
+  flex-wrap: nowrap;
+  overflow-x: auto;
+  gap: 16px;
+  padding-bottom: 12px;
+}
+
+.cards__containers .card {
+  flex: 0 0 auto; /* prevent shrink, keep width */
+}

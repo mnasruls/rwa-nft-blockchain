@@ -21,9 +21,10 @@ async function main() {
   console.log("RealEstate deployed to:", realEstate.address);
   console.log("Minting 3 real estates");
   for (let i = 1; i <= 3; i++) {
-    let tx = await realEstate.connect(seller).mint(`https://ipfs.io/ipfs/QmQVcpsjrA6cr1IjZAodYwmPekYgbnXGo4DFubJiLc2EB/${i}.json`);
+    let tx = await realEstate.connect(seller).mint(`https://ipfs.io/ipfs/QmQVcpsjrA6cr1iJjZAodYwmPekYgbnXGo4DFubJiLc2EB/${i}.json`);
     await tx.wait();
-    console.log(`Real estate #${i} minted`);
+    const uri = await realEstate.tokenURI(i);
+    console.log(`Real estate #${i} minted, URI:`, uri);
   }
 
   // deploy escrow
