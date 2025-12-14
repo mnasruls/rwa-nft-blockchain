@@ -156,5 +156,68 @@ describe('Escrow', () => {
             let balance = await escrow.getBalance()
             expect(balance).to.be.equal(0)
         })
+
+        describe('Cancellation', () => {
+             it('Buyer can cancel before inspection and gets earnest refunded; NFT returns to seller', async () => {
+                 // setup a fresh listing for tokenId 2
+                 const tokenURI2 = 'https://ipfs.io/ipfs/QmQUozrHLAusXDxrvsESJ3PYB3rUeUuBAvVWw6nop2uu7c/2.png'
+                 let tx = await realEstate.connect(seller).mint(tokenURI2)
+                 await tx.wait()
+                 tx = await realEstate.connect(seller).approve(escrow.address, 2)
+                 await tx.wait()
+                 tx = await escrow.connect(seller).list(2, buyer.address, tokens(10), tokens(5))
+                 await tx.wait()
+
+                 // deposit earnest
+                 tx = await escrow.connect(buyer).depositEarnest(2, { value: tokens(5) })
+                 await tx.wait()
+             
+                 // pre-inspection cancel by buyer
+                 tx = await escrow.connect(buyer).cancelSale(2)
+                 await tx.wait()
+             
+                 // escrow drained
+                 const balance = await escrow.getBalance()
+                 expect(balance).to.be.equal(tokens(0))
+             
+                 // NFT returned to seller
+                 const owner = await realEstate.ownerOf(2)
+                 expect(owner).to.be.equal(seller.address)
+             })
+         
+             it('Seller can cancel after inspection; seller receives contract balance; NFT returns to seller', async () => {
+                 // setup a fresh listing for tokenId 2
+                 const tokenURI2 = 'https://ipfs.io/ipfs/QmQUozrHLAusXDxrvsESJ3PYB3rUeUuBAvVWw6nop2uu7c/2.png'
+                 let tx = await realEstate.connect(seller).mint(tokenURI2)
+                 await tx.wait()
+                 tx = await realEstate.connect(seller).approve(escrow.address, 2)
+                 await tx.wait()
+                 tx = await escrow.connect(seller).list(2, buyer.address, tokens(10), tokens(5))
+                 await tx.wait()
+         
+                 // deposit earnest and set inspection true
+                 tx = await escrow.connect(buyer).depositEarnest(2, { value: tokens(5) })
+                 await tx.wait()
+         
+                 tx = await escrow.connect(inspector).updateInspectProperty(2, true)
+                 await tx.wait()
+         
+                 // fund remaining from lender
+                 await lender.sendTransaction({ to: escrow.address, value: tokens(5) })
+         
+                 // seller cancels
+                 await expect(escrow.connect(seller).cancelSale(2))
+                     .to.emit(escrow, 'Cancelled')
+                     .withArgs(2, seller.address, tokens(0), tokens(10))
+         
+                 // escrow drained
+                 const balance = await escrow.getBalance()
+                 expect(balance).to.be.equal(tokens(0))
+         
+                 // NFT returned to seller
+                 const owner = await realEstate.ownerOf(2)
+                 expect(owner).to.be.equal(seller.address)
+             })
+        })
     })
 })

@@ -1,5 +1,6 @@
 //SPDX-License-Identifier: Unlicense
 pragma solidity ^0.8.20;
+import "@openzeppelin/contracts/utils/Address.sol";
 
 interface IERC721 {
     function transferFrom(
@@ -36,6 +37,11 @@ contract Escrow {
     mapping (uint256 => address) public buyer;
     mapping (uint256 => bool) public isInspected;
     mapping (uint256 => mapping (address=> bool)) public approval;
+    // Track earnest deposits per listing to avoid mixing balances across listings
+    mapping (uint256 => uint256) public earnestDeposits;
+
+    // Emitted when a sale is cancelled
+    event Cancelled(uint256 indexed nftId, address indexed caller, uint256 refundToBuyer, uint256 payoutToSeller);
 
     constructor(
         address _nftAddress,
@@ -60,6 +66,8 @@ contract Escrow {
     function depositEarnest(uint256 _nftId) public payable onlyBuyer(_nftId) {
         require(isListed[_nftId], "Property is not listed");
         require(msg.value >= escrowAmount[_nftId], "Not enough escrow amount");
+        // record earnest deposit for this listing
+        earnestDeposits[_nftId] += msg.value;
     }
 
     function updateInspectProperty(uint256 _nftId, bool _isInspected) public onlyInspector {
@@ -79,20 +87,42 @@ contract Escrow {
         require(approval[_nftId][lender], "Lender not approved");
         require(address(this).balance >= purchasePrice[_nftId], "Not enough balance");
 
+        // effects
         isListed[_nftId] = false;
 
-        (bool success, ) = payable(seller).call{value: address(this).balance}("");
-        require(success, "Transfer failed");
-
+        // interactions
+        Address.sendValue(payable(seller), address(this).balance);
         IERC721(nftAddress).transferFrom(address(this), buyer[_nftId], _nftId);
     }
 
     function cancelSale(uint256 _nftId) public {
-        if (isInspected[_nftId] == false) {
-            payable(buyer[_nftId]).transfer(address(this).balance);
-        }else{
-            payable(seller).transfer(address(this).balance);
+        require(isListed[_nftId], "Property is not listed");
+
+        uint256 refundToBuyer = 0;
+        uint256 payoutToSeller = 0;
+
+        // effects first
+        isListed[_nftId] = false;
+
+        if (!isInspected[_nftId]) {
+            // Pre-inspection: only buyer can cancel, refund only the earnest they deposited
+            require(msg.sender == buyer[_nftId], "Only buyer can cancel before inspection");
+            refundToBuyer = earnestDeposits[_nftId];
+            require(refundToBuyer > 0, "No earnest to refund");
+            earnestDeposits[_nftId] = 0;
+            // interactions
+            Address.sendValue(payable(buyer[_nftId]), refundToBuyer);
+        } else {
+            // Post-inspection: only seller can cancel, seller receives contract balance as compensation
+            require(msg.sender == seller, "Only seller can cancel after inspection");
+            payoutToSeller = address(this).balance;
+            // interactions
+            Address.sendValue(payable(seller), payoutToSeller);
         }
+
+        // return NFT and emit event
+        IERC721(nftAddress).transferFrom(address(this), seller, _nftId);
+        emit Cancelled(_nftId, msg.sender, refundToBuyer, payoutToSeller);
     }
 
     receive() external payable {}
@@ -100,7 +130,5 @@ contract Escrow {
     function getBalance() public view returns (uint256) {
         return address(this).balance;
     }
-
-    
 }
 
